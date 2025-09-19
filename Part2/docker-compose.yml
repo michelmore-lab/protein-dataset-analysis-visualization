@@ -27,6 +27,9 @@ services:
     environment:
       - DATABASE_URL=postgresql://protein_user:protein_password@db:5432/protein_db
       - ENV=development
+      - AWS_REGION=us-east-1
+      - COGNITO_USER_POOL_ID=us-east-1_Bep0PJNNp
+      - COGNITO_APP_CLIENT_ID=6s0tgt4tnp6s02o1j8tmhgqnem
     volumes:
       - ./Part2_Backend:/app
     depends_on:
