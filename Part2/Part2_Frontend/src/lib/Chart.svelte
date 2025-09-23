@@ -33,6 +33,7 @@
   let isFocused = false;
   let focusedNodes = new Set<string>();
   let focusedLinks = new Set<string>();
+  let nodePositions = new Map<string, number>(); // Maps node.id to actual x position
 
   // Add new state variables for context menu and modal
   let showContextMenu = false;
@@ -120,7 +121,7 @@
     const dupMap = new Map<string, string>();
 
     // Only duplicate if there are more than 2 genomes
-    if (genomes.length > 2) {
+    if (genomes.length > 2 || (genomes.length === 2 && genomes[0] === genomes[1].replace('_copy', ''))) {
       original.nodes.forEach((n) => {
         if (n.genome_name === firstGenome) {
           const dupId = n.id + dupSuffix;
@@ -148,7 +149,7 @@
       const originalLink = { ...l };
 
       // If we need to duplicate (more than 2 genomes and first genome is involved)
-      if (genomes.length > 2) {
+      if (genomes.length > 2 || (genomes.length === 2 && genomes[0] === genomes[1].replace('_copy', ''))) {
         const rowSrc = genomes.indexOf(gSrc);
         const rowTgt = genomes.indexOf(gTgt);
         
@@ -190,7 +191,7 @@
     });
 
     // Add to union-find structure "links" between first-genome and duplicated nodes
-    if (genomes.length > 2) {
+    if (genomes.length > 2 || (genomes.length === 2 && genomes[0] === genomes[1].replace('_copy', ''))) {
       nodes.forEach((n) => {
         if (n._dup) {
           const originalId = n.id.slice(0, -dupSuffix.length);
@@ -373,8 +374,13 @@
       });
     }
 
+    // before scales
+    const hasExtraRow =
+      genomes.length > 2 ||
+      (genomes.length === 2 && genomes[0] === genomes[1].replace('_copy', ''));
+
     // scales
-    const numRows = genomes.length > 2 ? genomes.length + 1 : genomes.length; // Updated so no extra line when there are only 2 genomes
+    const numRows = hasExtraRow ? genomes.length + 1 : genomes.length;
     const y = d3.scaleBand<number>().domain(d3.range(numRows)).range([0, height]);
     const xExtent = d3.extent(nodes, (d) => d.rel_position) as [number, number];
     const spacing = 100;
@@ -382,12 +388,13 @@
     const x = d3.scaleLinear<number, number>().domain(xExtent).range([arrowHalf + margin.left + 10, chartWidth - arrowHalf - margin.right - 10]);
 
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    const rowOf = (n: Node) => (n._dup ? genomes.length : genomes.indexOf(n.genome_name));
+    const rowOf = (n: Node) =>
+      n._dup && hasExtraRow ? genomes.length : genomes.indexOf(n.genome_name);
 
     // ── LABELS ──
     const labelSvg = d3.select(labelSvgEl).attr('width', labelWidth).attr('height', height);
     labelSvg.selectAll('*').remove();
-    const yLabels = genomes.length > 2 ? [...genomes, genomes[0]] : genomes; // Updated so that the first genome is duplicated only when there are more than 2 genomes
+    const yLabels = hasExtraRow ? [...genomes, genomes[0]] : genomes;
     labelSvg
       .append('g')
       .attr('transform', `translate(${labelWidth - 10},${margin.top})`)

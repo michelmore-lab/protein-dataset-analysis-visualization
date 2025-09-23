@@ -274,31 +274,41 @@
 
   // Filter graph according to selected genomes
   function filterGraph() {
-    if (selectedGenomes.length !== 3 && selectedGenomes.length !== 2) {
-      console.error('Please select exactly 2 or 3 genomes to filter the graph.');
+    if (selectedGenomes.length < 1 || selectedGenomes.length > 3) {
+      console.error('Please select 1-3 genomes to filter the graph.');
       return;
     }
 
-    // Update genomes in filtered graph
-    filteredGraph.genomes = selectedGenomes;
-    filteredGraph.domain_name = selectedGraph.domain_name;  // Copy domain_name
+    const genomes = [...selectedGenomes];
+    const domain_name = selectedGraph.domain_name;
+    let nodes = selectedGraph.nodes.filter(n => genomes.includes(n.genome_name));
+    let links;
 
-    // Update nodes in filtered graph
-    filteredGraph.nodes = selectedGraph.nodes.filter(node =>
-      selectedGenomes.includes(node.genome_name)
-    );
+    if (genomes.length === 1) {
+      const g = genomes[0];
+      const dups = nodes.map(n => ({ ...n, id: n.id + '__dup', genome_name: g + '_copy', _dup: true }));
+      nodes = [...nodes, ...dups];
 
-    // Update links in filtered graph
-    filteredGraph.links = selectedGraph.links.filter(link => {
-      const sourceNode = selectedGraph.nodes.find(n => n.id === link.source);
-      const targetNode = selectedGraph.nodes.find(n => n.id === link.target);
+      const intra = selectedGraph.links.filter(l => {
+        const s = selectedGraph.nodes.find(n => n.id === l.source);
+        const t = selectedGraph.nodes.find(n => n.id === l.target);
+        return s && t && s.genome_name === g && t.genome_name === g;
+      });
+      const dupLinks = intra.map(l => ({ ...l, source: l.source + '__dup', target: l.target + '__dup' }));
+      links = [...intra, ...dupLinks];
 
-      if (!sourceNode || !targetNode) return false;
+      // ensure two genomes for layout
+      genomes.splice(0, 1, g, g + '_copy');
+    } else {
+      links = selectedGraph.links.filter(l => {
+        const s = selectedGraph.nodes.find(n => n.id === l.source);
+        const t = selectedGraph.nodes.find(n => n.id === l.target);
+        return s && t && genomes.includes(s.genome_name) && genomes.includes(t.genome_name);
+      });
+    }
 
-      // Check if both nodes belong to selected genomes
-      return selectedGenomes.includes(sourceNode.genome_name) &&
-             selectedGenomes.includes(targetNode.genome_name);
-    });
+    // Trigger Svelte reactivity
+    filteredGraph = { domain_name, genomes, nodes, links };
   }
 
   // Select domain/graph to focus on
@@ -450,7 +460,7 @@
 
                       <button
                         on:click={filterGraph}
-                        disabled={selectedGenomes.length !== 2 && selectedGenomes.length !== 3}
+                        disabled={selectedGenomes.length !== 1 && selectedGenomes.length !== 2 && selectedGenomes.length !== 3}
                         class="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors duration-200 cursor-pointer disabled:bg-green-300 disabled:cursor-not-allowed"
                       >
                         Confirm Selection
