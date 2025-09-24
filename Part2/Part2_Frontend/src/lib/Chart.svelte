@@ -119,16 +119,14 @@
     const nodes: Node[] = [...original.nodes];
     const dupMap = new Map<string, string>();
 
-    // Only duplicate if there are more than 2 genomes
-    if (genomes.length > 2) {
-      original.nodes.forEach((n) => {
+    // Duplication for all number of genomes
+    original.nodes.forEach((n) => {
         if (n.genome_name === firstGenome) {
           const dupId = n.id + dupSuffix;
           dupMap.set(n.id, dupId);
           nodes.push({ ...n, id: dupId, _dup: true });
         }
       });
-    }
 
     const genomeOf = new Map(nodes.map((n) => [n.id, n.genome_name]));
     const links: Link[] = original.links.map((l) => {
@@ -167,19 +165,61 @@
 
       return originalLink;
     })
-    // Exclude links between genes of the same genome
+    // Handle same-genome links based on number of genomes
     .filter((l) => {
       const gSrc = genomeOf.get(l.source);
       const gTgt = genomeOf.get(l.target);
       const isSameGenome = gSrc === gTgt;
+      
       if (isSameGenome) {
+        // For single genome, keep same-genome links (they'll be remapped to original->duplicate)
+        if (genomes.length === 1) {
+          return true;
+        }
+        // For 2+ genomes, exclude same-genome links
         console.log('Filtered out same-genome link:', {
           link: l,
           sourceGenome: gSrc,
           targetGenome: gTgt
         });
+        return false;
       }
-      return !isSameGenome;
+      return true;
+    })
+     // For single genome, remap same-genome links to go from original to duplicate
+     .map((l) => {
+       if (genomes.length === 1) {
+         const gSrc = genomeOf.get(l.source);
+         const gTgt = genomeOf.get(l.target);
+         const isSameGenome = gSrc === gTgt;
+         
+         if (isSameGenome) {
+           // Only remap if it's between different genes (not self-links)
+           if (l.source !== l.target) {
+             // Ensure source is original (not duplicate) and target is duplicate
+             const sourceId = l.source.endsWith(dupSuffix) ? l.source.slice(0, -dupSuffix.length) : l.source;
+             const targetId = dupMap.get(l.target) || l.target;
+             
+             return {
+               ...l,
+               source: sourceId,
+               target: targetId
+             };
+           }
+         }
+       }
+       return l;
+     })
+    // Remove duplicate links between the same node pairs
+    .filter((l, index, array) => {
+      const linkKey = `${l.source}-${l.target}`;
+      const reverseKey = `${l.target}-${l.source}`;
+      
+      // Keep only the first occurrence of each unique link pair
+      return array.findIndex(link => 
+        `${link.source}-${link.target}` === linkKey || 
+        `${link.source}-${link.target}` === reverseKey
+      ) === index;
     });
 
     // UnionFind to group connected components by color
@@ -190,7 +230,7 @@
     });
 
     // Add to union-find structure "links" between first-genome and duplicated nodes
-    if (genomes.length > 2) {
+    if (genomes.length > 2 || genomes.length === 1) {
       nodes.forEach((n) => {
         if (n._dup) {
           const originalId = n.id.slice(0, -dupSuffix.length);
@@ -374,7 +414,7 @@
     }
 
     // scales
-    const numRows = genomes.length > 2 ? genomes.length + 1 : genomes.length; // Updated so no extra line when there are only 2 genomes
+    const numRows = genomes.length === 1 ? 2 : (genomes.length > 2 ? genomes.length + 1 : genomes.length); // Single genome gets 2 rows, >2 genomes get +1, otherwise use genome count
     const y = d3.scaleBand<number>().domain(d3.range(numRows)).range([0, height]);
     const xExtent = d3.extent(nodes, (d) => d.rel_position) as [number, number];
     const spacing = 100;
@@ -382,12 +422,17 @@
     const x = d3.scaleLinear<number, number>().domain(xExtent).range([arrowHalf + margin.left + 10, chartWidth - arrowHalf - margin.right - 10]);
 
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    const rowOf = (n: Node) => (n._dup ? genomes.length : genomes.indexOf(n.genome_name));
+    const rowOf = (n: Node) => {
+      if (n._dup) {
+        return genomes.length === 1 ? 1 : genomes.length; // For single genome, dup goes to row 1, otherwise to last row
+      }
+      return genomes.indexOf(n.genome_name);
+    };
 
     // ── LABELS ──
     const labelSvg = d3.select(labelSvgEl).attr('width', labelWidth).attr('height', height);
     labelSvg.selectAll('*').remove();
-    const yLabels = genomes.length > 2 ? [...genomes, genomes[0]] : genomes; // Updated so that the first genome is duplicated only when there are more than 2 genomes
+    const yLabels = genomes.length === 1 ? [...genomes, genomes[0]] : (genomes.length > 2 ? [...genomes, genomes[0]] : genomes); // Single genome and >2 genomes get duplicated labels
     labelSvg
       .append('g')
       .attr('transform', `translate(${labelWidth - 10},${margin.top})`)

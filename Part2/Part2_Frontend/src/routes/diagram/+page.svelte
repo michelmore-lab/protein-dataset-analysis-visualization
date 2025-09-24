@@ -274,8 +274,8 @@
 
   // Filter graph according to selected genomes
   function filterGraph() {
-    if (selectedGenomes.length !== 3 && selectedGenomes.length !== 2) {
-      console.error('Please select exactly 2 or 3 genomes to filter the graph.');
+    if (selectedGenomes.length !== 3 && selectedGenomes.length !== 2 && selectedGenomes.length !== 1) {
+      console.error('Please select 1, 2, or 3 genomes to filter the graph.');
       return;
     }
 
@@ -450,7 +450,7 @@
 
                       <button
                         on:click={filterGraph}
-                        disabled={selectedGenomes.length !== 2 && selectedGenomes.length !== 3}
+                        disabled={selectedGenomes.length !== 2 && selectedGenomes.length !== 3 && selectedGenomes.length !== 1}
                         class="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors duration-200 cursor-pointer disabled:bg-green-300 disabled:cursor-not-allowed"
                       >
                         Confirm Selection

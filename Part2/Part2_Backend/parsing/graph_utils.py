@@ -100,9 +100,9 @@ def add_links(df_only_cutoffs, row_max, col_max, coords, genomes=None, domain=No
     gene_to_genome = dict(zip(coords['name'], coords['genome']))
     for row in df_only_cutoffs.index:
         for col in df_only_cutoffs.columns:
-            # Optionally skip links between genes in the same genome
-            if genomes and (gene_to_genome.get(row) == gene_to_genome.get(col)):
-                continue
+            # # Optionally skip links between genes in the same genome
+            # if genomes and (gene_to_genome.get(row) == gene_to_genome.get(col)):
+            #     continue
             is_col_max = pd.notna(col_max.at[row, col])
             is_row_max = pd.notna(row_max.at[row, col])
             if is_row_max and is_col_max:
