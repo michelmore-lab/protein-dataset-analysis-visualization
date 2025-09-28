@@ -2,6 +2,9 @@
   import { onMount, afterUpdate } from 'svelte';
   import * as d3 from 'd3';
   import UnionFind from '$lib/UnionFind';
+  import { selectionState } from '$lib/report/selectionStore';
+  import { buildAndSetSnapshot } from '$lib/report/reportSnapshot';
+
 
   /**
    * Props
@@ -305,6 +308,33 @@
       return true;
     });
 
+    // --- keep report snapshot in sync (used by ReportButton) ---
+    buildAndSetSnapshot({
+      domain: graph.domain_name,
+      genomes_order: graph.genomes ?? [],
+      filters: {
+        cutoff,
+        showReciprocal,
+        showNonReciprocal,
+        showConsistent,
+        showInconsistent,
+        showPartiallyConsistent
+      },
+      focus_mode: isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0),
+      nodes: nodes.map(n => ({
+        id: n.id.endsWith('__dup') ? n.id.slice(0, -'__dup'.length) : n.id, // normalize duplicate-row ids
+        genome_name: n.genome_name,
+        protein_name: n.protein_name,
+        direction: n.direction,
+        rel_position: n.rel_position,
+        is_present: n.is_present,
+        gene_type: n.gene_type
+      })),
+      links: visibleLinks
+    });
+
+
+
     // Calculate focused nodes and links if in focus mode
     if (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0)) {
       focusedNodes.clear();
@@ -383,6 +413,7 @@
 
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
     const rowOf = (n: Node) => (n._dup ? genomes.length : genomes.indexOf(n.genome_name));
+
 
     // ── LABELS ──
     const labelSvg = d3.select(labelSvgEl).attr('width', labelWidth).attr('height', height);
@@ -534,6 +565,12 @@
         } else {
           selectedLinks.add(linkId);
         }
+
+        selectionState.set({
+          isFocused,
+          nodes: Array.from(selectedNodes),
+          links: Array.from(selectedLinks)
+        });
         draw();
       })
       .on('mouseover', function (event, d) {
@@ -653,6 +690,11 @@
           }
         });
         selectedNodesCount = selectedNodes.size;
+        selectionState.set({
+          isFocused,
+          nodes: Array.from(selectedNodes),
+          links: Array.from(selectedLinks)
+        });
         draw();
       })
       .on('mouseover', function (event, d) {
@@ -821,12 +863,22 @@
       selectedNodesCount = 0;
       isFocused = false;
     }
+    selectionState.set({
+      isFocused,
+      nodes: Array.from(selectedNodes),
+      links: Array.from(selectedLinks)
+    });
     draw();
   }
 
   function applyFocus() {
     if (selectedNodes.size === 0) return;
     isFocused = true;
+    selectionState.set({
+      isFocused,
+      nodes: Array.from(selectedNodes),
+      links: Array.from(selectedLinks)
+    });
     draw();
   }
 
@@ -834,6 +886,11 @@
     isFocused = false;
     selectedNodes.clear();
     selectedNodesCount = 0;
+    selectionState.set({
+      isFocused,
+      nodes: Array.from(selectedNodes),
+      links: Array.from(selectedLinks)
+    });
     draw();
   }
 

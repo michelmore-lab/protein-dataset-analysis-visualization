@@ -6,6 +6,8 @@
   import { oidcClient } from '$lib/auth'
   import { getTokens } from '$lib/getTokens';
   import UploadModal from '$lib/components/UploadModal.svelte';
+  import ReportDownloadButton from '$lib/components/ReportDownloadButton.svelte';
+
 
   interface Node {
     id: string;
@@ -592,6 +594,7 @@
                 </svg>
                 Upload New Files
               </button>
+              <ReportDownloadButton/>
             {/if}
           </div>
         {/if}
