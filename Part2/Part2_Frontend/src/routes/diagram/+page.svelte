@@ -6,6 +6,8 @@
   import { oidcClient } from '$lib/auth'
   import { getTokens } from '$lib/getTokens';
   import UploadModal from '$lib/components/UploadModal.svelte';
+  import ReportButton from '$lib/components/ReportButton.svelte';
+
 
   interface Node {
     id: string;
@@ -348,6 +350,60 @@
 
     draggedGenome = null;
   }
+
+
+    function downloadCurrentReport() {
+      const snap = get(reportSnapshot);
+      if (!snap) {
+        alert('No graph is visible to report on yet.');
+        return;
+      }
+
+      // Build a lightweight Markdown file (no DB/S3 writes)
+      const lines: string[] = [];
+      lines.push(`# Graph Report`);
+      lines.push(`Generated: ${new Date(snap.generated_at).toLocaleString()}`);
+      if (snap.domain) lines.push(`Domain: ${snap.domain}`);
+      lines.push('');
+      lines.push(`**Genomes (in order):** ${snap.genomes_order.join(' → ')}`);
+      lines.push(
+        `**Filters:** cutoff=${snap.filters.cutoff}% | Reciprocal=${snap.filters.showReciprocal} | ` +
+        `NonReciprocal=${snap.filters.showNonReciprocal} | Consistent=${snap.filters.showConsistent} | ` +
+        `Inconsistent=${snap.filters.showInconsistent} | PartiallyConsistent=${snap.filters.showPartiallyConsistent}`
+      );
+      lines.push('');
+
+      lines.push(`## Nodes (${snap.nodes.length})`);
+      for (const n of snap.nodes) {
+        lines.push(
+          `- **${n.protein_name}** \`(${n.id})\` — ${n.genome_name} | pos ${n.rel_position} | ` +
+          `dir ${n.direction === 'plus' ? '+' : '-'} | present ${n.is_present ? 'YES' : 'NO'}` +
+          (n.gene_type ? ` | domain ${n.gene_type}` : '')
+        );
+      }
+      lines.push('');
+
+      lines.push(`## Links (${snap.links.length})`);
+      for (const l of snap.links) {
+        if ('similarity' in (l.details as any)) {
+          const d = l.details as { type: 'reciprocal' | 'non_reciprocal'; similarity: number };
+          lines.push(`- ${l.source} ⇄ ${l.target} — ${d.type === 'reciprocal' ? 'Reciprocal' : 'Non-reciprocal'}, Similarity ${d.similarity}%`);
+        } else {
+          const d = l.details as { type: string };
+          lines.push(`- ${l.source} ⇄ ${l.target} — ${d.type}`);
+        }
+      }
+
+      const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `graph-report-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+  }
 </script>
 
 <!-- Main layout container -->
@@ -592,6 +648,17 @@
                 </svg>
                 Upload New Files
               </button>
+
+              <ReportButton
+              currentGraph={filteredGraph}
+              filters={{
+                cutoff,
+                showReciprocal,
+                showNonReciprocal,
+                showConsistent,
+                showInconsistent,
+                showPartiallyConsistent
+              }} />
             {/if}
           </div>
         {/if}

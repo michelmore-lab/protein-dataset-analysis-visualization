@@ -2,6 +2,8 @@
   import { onMount, afterUpdate } from 'svelte';
   import * as d3 from 'd3';
   import UnionFind from '$lib/UnionFind';
+  import { selectionState } from '$lib/report/selectionStore';
+
 
   /**
    * Props
@@ -534,6 +536,11 @@
         } else {
           selectedLinks.add(linkId);
         }
+        selectionState.set({
+          isFocused,
+          nodes: Array.from(selectedNodes),
+          links: Array.from(selectedLinks)
+        });
         draw();
       })
       .on('mouseover', function (event, d) {
@@ -653,6 +660,11 @@
           }
         });
         selectedNodesCount = selectedNodes.size;
+         selectionState.set({
+          isFocused,
+          nodes: Array.from(selectedNodes),
+          links: Array.from(selectedLinks)
+        });
         draw();
       })
       .on('mouseover', function (event, d) {
@@ -821,12 +833,22 @@
       selectedNodesCount = 0;
       isFocused = false;
     }
+     selectionState.set({
+        isFocused,
+        nodes: Array.from(selectedNodes),
+        links: Array.from(selectedLinks)
+    });
     draw();
   }
 
   function applyFocus() {
     if (selectedNodes.size === 0) return;
     isFocused = true;
+     selectionState.set({
+        isFocused,
+        nodes: Array.from(selectedNodes),
+        links: Array.from(selectedLinks)
+      });
     draw();
   }
 
@@ -834,6 +856,11 @@
     isFocused = false;
     selectedNodes.clear();
     selectedNodesCount = 0;
+      selectionState.set({
+        isFocused,
+        nodes: Array.from(selectedNodes),
+        links: Array.from(selectedLinks)
+      });
     draw();
   }
 
