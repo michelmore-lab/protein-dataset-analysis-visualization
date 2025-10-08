@@ -12,6 +12,7 @@
     genomes: string[];
     nodes: Node[];
     links: Link[];
+    links_within_genome: LinksWithinGenome[];
     domain_name?: string;
   };
   export let cutoff: number = 25;
@@ -69,6 +70,12 @@
     _dup?: boolean;      // internal flag for duplicated bottom‑row copy
   }
 
+  interface LinksWithinGenome {
+    source: string;
+    target: string;
+    score: number;
+  }
+
   type ScoreLink = {
     source: string;
     target: string;
@@ -82,7 +89,7 @@
     link_type: string; // "solid_color" | "dotted_grey" | etc.
   };
 
-  type Link = ScoreLink | CompareLink;
+  type Link = ScoreLink | CompareLink | LinksWithinGenome;
 
   // ────────────────────────────────────────────────────────────────
   //  DOM refs / constants
@@ -92,8 +99,8 @@
   let tooltipEl: HTMLDivElement;
 
   const viewportWidth = 1000;
-  // Calculate height based on number of rows (150px per row minimum)
-  $: height = (graph.genomes?.length || 0) * 150;
+  // Modified to give more space for single genome
+  $: height = (graph.genomes?.length || 0) === 1 ? 300 : (graph.genomes?.length || 0) * 150;
   const margin = { top: 5, right: 20, bottom: 5, left: 10 };
   const arrowHalf = 25;
 
@@ -110,28 +117,54 @@
     if (!original) return {
       nodes: [] as Node[],
       links: [] as Link[],
+      links_within_genome: [] as LinksWithinGenome[],
       genomes: [] as string[],
-      nodeColor: new Map<string, string>()
+      nodeColor: new Map<string, string>(),
+      withinGenomeNodeColor: new Map<string, string>(),
     };
+    
     const genomes = original.genomes;
+    
+    // Filter within-genome links to only include selected genomes
+    const filteredWithinGenomeLinks = (original.links_within_genome || []).filter(link => {
+      const sourceNode = original.nodes.find(n => n.id === link.source);
+      const targetNode = original.nodes.find(n => n.id === link.target);
+      return sourceNode && targetNode && 
+             genomes.includes(sourceNode.genome_name) && 
+             genomes.includes(targetNode.genome_name);
+    });
+    
+    // Use original data for the rest of the function
     const firstGenome = genomes[0];
-
-    const nodes: Node[] = [...original.nodes];
+    const nodes: Node[] = [...original.nodes];  // Use original nodes
     const dupMap = new Map<string, string>();
 
-    // Duplication for all number of genomes
-    original.nodes.forEach((n) => {
+    // Duplication for all number of genomes (including single genome)
+    if (genomes.length > 2 || genomes.length === 1) {
+      console.log('Creating duplicates for genomes:', genomes);
+      console.log('First genome:', firstGenome);
+      console.log('Original nodes:', original.nodes.length);
+      
+      original.nodes.forEach((n) => {
         if (n.genome_name === firstGenome) {
           const dupId = n.id + dupSuffix;
           dupMap.set(n.id, dupId);
           nodes.push({ ...n, id: dupId, _dup: true });
+          console.log('Created duplicate:', dupId, 'for node:', n.id);
         }
       });
+      
+      console.log('Total nodes after duplication:', nodes.length);
+      console.log('Duplicate map:', Object.fromEntries(dupMap));
+    }
 
     const genomeOf = new Map(nodes.map((n) => [n.id, n.genome_name]));
-    const links: Link[] = original.links.map((l) => {
+    
+    // Process links uniformly - use original.links
+    const links: Link[] = original.links.map((l) => {  // Fix: was missing 'original.links'
       const gSrc = genomeOf.get(l.source);
       const gTgt = genomeOf.get(l.target);
+      
       if (!gSrc || !gTgt) {
         console.warn('Link has missing genome mapping:', {
           link: l,
@@ -151,7 +184,6 @@
         const rowTgt = genomes.indexOf(gTgt);
         
         if (Math.abs(rowSrc - rowTgt) > 1) {
-          // Check if the source/target is already a duplicate
           const sourceNode = nodes.find(n => n.id === l.source);
           const targetNode = nodes.find(n => n.id === l.target);
           
@@ -171,62 +203,53 @@
       const gTgt = genomeOf.get(l.target);
       const isSameGenome = gSrc === gTgt;
       
-      if (isSameGenome) {
-        // For single genome, keep same-genome links (they'll be remapped to original->duplicate)
-        if (genomes.length === 1) {
-          return true;
-        }
-        // For 2+ genomes, exclude same-genome links
-        console.log('Filtered out same-genome link:', {
-          link: l,
-          sourceGenome: gSrc,
-          targetGenome: gTgt
-        });
-        return false;
-      }
-      return true;
-    })
-     // For single genome, remap same-genome links to go from original to duplicate
-     .map((l) => {
-       if (genomes.length === 1) {
-         const gSrc = genomeOf.get(l.source);
-         const gTgt = genomeOf.get(l.target);
-         const isSameGenome = gSrc === gTgt;
-         
-         if (isSameGenome) {
-           // Only remap if it's between different genes (not self-links)
-           if (l.source !== l.target) {
-             // Ensure source is original (not duplicate) and target is duplicate
-             const sourceId = l.source.endsWith(dupSuffix) ? l.source.slice(0, -dupSuffix.length) : l.source;
-             const targetId = dupMap.get(l.target) || l.target;
-             
-             return {
-               ...l,
-               source: sourceId,
-               target: targetId
-             };
-           }
-         }
-       }
-       return l;
-     })
-    // Remove duplicate links between the same node pairs
-    .filter((l, index, array) => {
-      const linkKey = `${l.source}-${l.target}`;
-      const reverseKey = `${l.target}-${l.source}`;
-      
-      // Keep only the first occurrence of each unique link pair
-      return array.findIndex(link => 
-        `${link.source}-${link.target}` === linkKey || 
-        `${link.source}-${link.target}` === reverseKey
-      ) === index;
+      // Exclude same-genome links - they belong in links_within_genome
+      return !isSameGenome;
     });
 
-    // UnionFind to group connected components by color
-    const uf = new UnionFind(nodes.map((n) => n.id));
+    // Process within-genome links uniformly
+    const linksWithinGenome: LinksWithinGenome[] = filteredWithinGenomeLinks
+      .map(l => ({ ...l }));
+
+    // ADD THIS: Remap within-genome links for single genome case
+    if (genomes.length === 1) {
+      linksWithinGenome.forEach((l, index) => {
+        const sourceNode = nodes.find(n => n.id === l.source);
+        const targetNode = nodes.find(n => n.id === l.target);
+        
+        // If both nodes are from the first genome, remap target to duplicate
+        if (sourceNode && targetNode && 
+            sourceNode.genome_name === firstGenome && 
+            targetNode.genome_name === firstGenome) {
+          const dupTargetId = dupMap.get(l.target);
+          if (dupTargetId) {
+            linksWithinGenome[index] = { ...l, target: dupTargetId };
+          }
+        }
+      });
+    }
+
+    // Create UnionFind and coloring logic uniformly
+    const uf = new UnionFind(nodes.map(n => n.id));
+    const withinGenomeUF = new UnionFind(nodes.map(n => n.id));
+    
+    // Apply union logic based on links
+    links.forEach(l => {
+      if ('score' in l && l.score > 25) { // or whatever threshold
+        uf.union(l.source, l.target);
+      }
+    });
+
     links.forEach((l) => {
       if ('is_reciprocal' in l && l.is_reciprocal) uf.union(l.source, l.target);
       if ('link_type' in l && (l.link_type === 'solid_color' || l.link_type === 'dotted_color')) uf.union(l.source, l.target);
+    });
+
+    // ADD THIS: Process within-genome links for UnionFind
+    linksWithinGenome.forEach(l => {
+      if (l.score > 90) { // or whatever threshold you want
+        withinGenomeUF.union(l.source, l.target);
+      }
     });
 
     // Add to union-find structure "links" between first-genome and duplicated nodes
@@ -289,42 +312,88 @@
       })
     );
 
-    return { nodes, links, genomes, nodeColor, uf };
+    // ADD THIS: Create within-genome coloring
+    const withinGenomeNodeColor = new Map<string, string>();
+    nodes.forEach(n => {
+      const root = withinGenomeUF.find(n.id);
+      const componentSize = nodes.filter(node => withinGenomeUF.find(node.id) === root).length;
+      if (componentSize > 1) {
+        withinGenomeNodeColor.set(n.id, '#ff6b6b'); // Red for connected nodes
+      } else {
+        withinGenomeNodeColor.set(n.id, '#e6e6e6');
+      }
+    });
+
+    return { 
+      nodes, 
+      links, 
+      links_within_genome: linksWithinGenome,  // Return actual data instead of []
+      genomes, 
+      nodeColor, 
+      uf, 
+      withinGenomeNodeColor,  // Return actual coloring instead of new Map()
+      withinGenomeUF: withinGenomeUF
+    };
   }
+
+  function massageSingleGenome(original: typeof graph) {
+  const genomes = original.genomes;
+  const nodes: Node[] = [...original.nodes];
+  
+  // Keep links_within_genome separate - don't convert to Link type
+  const linksWithinGenome: LinksWithinGenome[] = (original.links_within_genome || []).map(l => ({ ...l }));
+  
+  // Create separate UnionFind for within-genome relationships
+  const withinGenomeUF = new UnionFind(nodes.map(n => n.id));
+  linksWithinGenome.forEach(l => {
+    // You can define your own logic for when to union nodes
+    // Maybe based on score threshold, relationship type, etc.
+    if (l.score > 50) { // example threshold
+      withinGenomeUF.union(l.source, l.target);
+    }
+  });
+
+  // Create within-genome coloring
+  const withinGenomeNodeColor = new Map<string, string>();
+  nodes.forEach(n => {
+    const root = withinGenomeUF.find(n.id);
+    const componentSize = nodes.filter(node => withinGenomeUF.find(node.id) === root).length;
+    if (componentSize > 1) {
+      withinGenomeNodeColor.set(n.id, '#ff6b6b'); // Red for connected nodes
+    } else {
+      withinGenomeNodeColor.set(n.id, '#4f46e5'); // Blue for isolated nodes
+    }
+  });
+  
+  return { 
+    nodes, 
+    links: [], // Empty for single genome
+    links_within_genome: linksWithinGenome,
+    genomes, 
+    nodeColor: new Map(), // Empty for single genome
+    withinGenomeNodeColor, // Use this instead
+    uf: new UnionFind([]), // Empty for single genome
+    withinGenomeUF // Use this for within-genome logic
+  };
+}
 
   // ────────────────────────────────────────────────────────────────
   //  Render
   // ────────────────────────────────────────────────────────────────
   function draw() {
-    const { nodes, links, genomes, nodeColor, uf } = massage(graph);
-    nodeColorMap = nodeColor;
-    if (!nodes.length) return;
-
-    // Create a map of node IDs to their data for quick lookup
-    const nodeMap = new Map(nodes.map(node => [node.id, node]));
-
-    // Filter out links that reference non-existent nodes
-    const validLinks = links.filter(link => {
-        const sourceNode = nodeMap.get(link.source);
-        const targetNode = nodeMap.get(link.target);
-        return sourceNode && targetNode;
-    });
-
-    // Update the graph with only valid links
-    graph = {
-        ...graph,
-        links: validLinks
-    };
-
-    // apply cutoff filter
-    const visibleLinks = links.filter((l) => {
+    const { nodes, links, links_within_genome, genomes, nodeColor, uf, withinGenomeNodeColor, withinGenomeUF } = massage(graph);
+    
+    // Combine regular links and within-genome links
+    const allLinks = [...links, ...(genomes.length === 1 ? links_within_genome : [])];
+    
+    // Apply cutoff filter to all links
+    const visibleLinks = allLinks.filter((l) => {
       // First apply cutoff filter for score-based links
       if ('score' in l && l.score < cutoff) return false;
 
       // Then apply link type filters
       if ('is_reciprocal' in l) {
-        return l.is_reciprocal ? showReciprocal : showNonReciprocal;
-      }
+        return (l as ScoreLink).is_reciprocal ? showReciprocal : showNonReciprocal;      }
 
       if ('link_type' in l) {
         switch (l.link_type) {
@@ -344,6 +413,25 @@
 
       return true;
     });
+
+    nodeColorMap = nodeColor;
+    if (!nodes.length) return;
+
+    // Create a map of node IDs to their data for quick lookup
+    const nodeMap = new Map(nodes.map(node => [node.id, node]));
+
+    // Filter out links that reference non-existent nodes
+    const validLinks = links.filter(link => {
+        const sourceNode = nodeMap.get(link.source);
+        const targetNode = nodeMap.get(link.target);
+        return sourceNode && targetNode;
+    });
+
+    // Update the graph with only valid links
+    graph = {
+        ...graph,
+        links: validLinks
+    };
 
     // Calculate focused nodes and links if in focus mode
     if (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0)) {
@@ -432,6 +520,15 @@
     // ── LABELS ──
     const labelSvg = d3.select(labelSvgEl).attr('width', labelWidth).attr('height', height);
     labelSvg.selectAll('*').remove();
+    labelSvg
+      .append('g')
+      .attr('transform', `translate(${labelWidth - 10},${margin.top})`)
+      .append('text')
+      .attr('y', y(0)! + y.bandwidth() / 2)
+      .attr('dy', '0.35em')
+      .attr('text-anchor', 'end')
+      .style('font-size', '12px')
+      .text(nodes[0]?.genome_name || 'Genome');
     const yLabels = genomes.length === 1 ? [...genomes, genomes[0]] : (genomes.length > 2 ? [...genomes, genomes[0]] : genomes); // Single genome and >2 genomes get duplicated labels
     labelSvg
       .append('g')
@@ -561,6 +658,22 @@
       .attr('stroke', d => {
         if (isFocused && !focusedLinks.has(`${d.source}-${d.target}`)) return '#e6e6e6';
         if (selectedLinks.has(`${d.source}-${d.target}`)) return '#000';
+        
+        // Check if this is a within-genome link
+        if ('score' in d && !('is_reciprocal' in d) && !('link_type' in d) && withinGenomeUF) {
+          // This is a within-genome link
+          const sourceRoot = withinGenomeUF.find(d.source);
+          const targetRoot = withinGenomeUF.find(d.target);
+          if (sourceRoot === targetRoot) {
+            // Connected by UnionFind - use colored stroke
+            return withinGenomeNodeColor.get(d.source) || '#ff6b6b';
+          } else {
+            // Not connected - use grey
+            return '#bbb';
+          }
+        }
+        
+        // Regular link logic
         if ('is_reciprocal' in d) return d.is_reciprocal ? (nodeColorMap.get(d.source) || '#bbb') : '#bbb';
         if ('link_type' in d) {
           if (d.link_type === 'solid_red') return 'red';
@@ -601,7 +714,11 @@
 
           let detail = '';
           if ('score' in d) {
-            detail = `Similarity: ${d.score}%` + (d.is_reciprocal ? ' (Reciprocal)' : ' (Non-Reciprocal)');
+            if ('is_reciprocal' in d) {
+              detail = `Similarity: ${d.score}%` + (d.is_reciprocal ? ' (Reciprocal)' : ' (Non-Reciprocal)');
+            } else {
+              detail = `Within-genome similarity: ${d.score}%`;
+            }
           } else if (d.link_type === 'solid_red') {
             detail = 'Inconsistent Across Domains';
           } else if (d.link_type === 'solid_color') {
@@ -666,6 +783,13 @@
       .attr('d', (d) => arrowPath(d.direction))
       .attr('fill', (d) => {
         if (isFocused && !focusedNodes.has(d.id)) return '#e6e6e6';
+        
+        // Use within-genome coloring for single genome case
+        if (genomes.length === 1 && withinGenomeNodeColor) {
+          return withinGenomeNodeColor.get(d.id) || '#bbb';
+        }
+        
+        // Use regular node coloring for multi-genome cases
         return nodeColorMap.get(d.id) || '#bbb';
       })
       .attr('stroke', (d) => selectedNodes.has(d.id) ? 'black' : 'none')
@@ -802,7 +926,12 @@
           if (isFocused && !focusedNodes.has(d.id)) {
             d3.select(this).attr('fill', '#e6e6e6');
           } else {
-            d3.select(this).attr('fill', nodeColorMap.get(d.id) || '#bbb');
+            // Use the same logic as the initial fill
+            if (genomes.length === 1 && withinGenomeNodeColor) {
+              d3.select(this).attr('fill', withinGenomeNodeColor.get(d.id) || '#bbb');
+            } else {
+              d3.select(this).attr('fill', nodeColorMap.get(d.id) || '#bbb');
+            }
           }
           d3.select(tooltipEl).style('opacity', 0);
         } catch (error) {

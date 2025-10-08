@@ -15,6 +15,7 @@ def create_output(matrix_data, coords, domain=None):
         For domain case: tuple of (nodes, links, domain_connections, domain_genes, cutoff_index)
     """
     genomes = coords['genome'].unique().tolist()
+    gene_to_genome = dict(zip(coords['name'], coords['genome']))
     
     if domain is None:
         # General case
@@ -24,6 +25,10 @@ def create_output(matrix_data, coords, domain=None):
             matrix_data['df_only_cutoffs'], 
             matrix_data['row_max'], 
             matrix_data['col_max'], 
+            coords
+        )
+        output["links_within_genome"] = add_links_within_genome(
+            matrix_data['df_only_cutoffs'],
             coords
         )
         return output
@@ -39,10 +44,14 @@ def create_output(matrix_data, coords, domain=None):
             matrix_data['df_only_cutoffs'],
             matrix_data['row_max'],
             matrix_data['col_max'],
-            coords,
+            gene_to_genome,
             genomes=genomes,
             domain=domain,
             return_connections=True
+        )
+        links_within_genome = add_links_within_genome(
+            matrix_data['df_only_cutoffs'],
+            gene_to_genome
         )
         return nodes, links, domain_connections, domain_genes, matrix_data['df_only_cutoffs'].index
 
@@ -81,13 +90,13 @@ def add_nodes(coords, cutoff_index=None, include_gene_type=False, include_domain
     return nodes
 
 
-def add_links(df_only_cutoffs, row_max, col_max, coords, genomes=None, domain=None, return_connections=False):
+def add_links(df_only_cutoffs, row_max, col_max, gene_to_genome, genomes=None, domain=None, return_connections=False):
     """
     Create link dictionaries for graph output.
     Args:
         df_only_cutoffs: DataFrame of cutoff-filtered matrix
         row_max, col_max: DataFrames of row/col maxes
-        coords: DataFrame with coordinate data
+        gene_to_genome: Dictionary mapping gene names to genome names
         genomes: Optional list of genome names (for domain case)
         domain: Optional domain name (for domain case)
         return_connections: If True, also return domain_connections and all_genes
@@ -97,12 +106,11 @@ def add_links(df_only_cutoffs, row_max, col_max, coords, genomes=None, domain=No
     links = []
     domain_connections = {} if return_connections else None
     all_genes = {} if return_connections and domain else None
-    gene_to_genome = dict(zip(coords['name'], coords['genome']))
     for row in df_only_cutoffs.index:
         for col in df_only_cutoffs.columns:
-            # # Optionally skip links between genes in the same genome
-            # if genomes and (gene_to_genome.get(row) == gene_to_genome.get(col)):
-            #     continue
+            # Optionally skip links between genes in the same genome
+            if genomes and (gene_to_genome.get(row) == gene_to_genome.get(col)):
+                continue
             is_col_max = pd.notna(col_max.at[row, col])
             is_row_max = pd.notna(row_max.at[row, col])
             if is_row_max and is_col_max:
@@ -131,3 +139,19 @@ def add_links(df_only_cutoffs, row_max, col_max, coords, genomes=None, domain=No
         all_genes[domain] = df_only_cutoffs.index.tolist()
         return links, domain_connections, all_genes
     return links 
+
+def add_links_within_genome(df_only_cutoffs, gene_to_genome):
+    links = []
+    for row in df_only_cutoffs.index:
+        for col in df_only_cutoffs.columns:
+            if row == col:
+                continue
+            if gene_to_genome.get(row) == gene_to_genome.get(col):
+                score = df_only_cutoffs.at[row, col]
+                if score > 60:
+                    links.append({
+                        "source": row,
+                        "target": col,
+                        "score": float(score)
+                    })
+    return links

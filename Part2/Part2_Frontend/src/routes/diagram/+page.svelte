@@ -25,10 +25,17 @@
     is_reciprocal: boolean;
   }
 
+  interface LinksWithinGenome {
+    source: string;
+    target: string;
+    score: number;
+  }
+
   interface Graph {
     domain_name?: string; // optional domain name
     nodes: Node[];
     links: Link[];
+    links_within_genome: LinksWithinGenome[];
     genomes: string[];   // list of genome names
   }
 
@@ -37,9 +44,9 @@
   let isAuthenticated = false;
 
   let graphs: Graph[] = [];
-  let selectedGraph: Graph = { nodes: [], links: [], genomes: [] }; // Current graph to be displayed
+  let selectedGraph: Graph = { nodes: [], links: [], genomes: [], links_within_genome: [] }; // Current graph to be displayed
   let selectedGenomes: string[] = [];
-  let filteredGraph: Graph = { nodes: [], links: [], genomes: [] };
+  let filteredGraph: Graph = { nodes: [], links: [], genomes: [], links_within_genome: [] };
   let draggedGenome: string | null = null;
 
   // Variables for uploaded files/inputs
@@ -137,7 +144,7 @@
 
       // Reset selected genomes and filtered graph
       selectedGenomes = [];
-      filteredGraph = { nodes: [], links: [], genomes: [] };
+      filteredGraph = { nodes: [], links: [], genomes: [], links_within_genome: [] };
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "An error occurred.";
       console.error("Detailed error:", error);
@@ -287,6 +294,18 @@
     filteredGraph.nodes = selectedGraph.nodes.filter(node =>
       selectedGenomes.includes(node.genome_name)
     );
+
+    // Update links_within_genome in filtered graph
+    filteredGraph.links_within_genome = selectedGraph.links_within_genome.filter(link => {
+      const sourceNode = selectedGraph.nodes.find(n => n.id === link.source);
+      const targetNode = selectedGraph.nodes.find(n => n.id === link.target);
+
+      if (!sourceNode || !targetNode) return false;
+
+      // Check if both nodes belong to selected genomes
+      return selectedGenomes.includes(sourceNode.genome_name) &&
+            selectedGenomes.includes(targetNode.genome_name);
+    });
 
     // Update links in filtered graph
     filteredGraph.links = selectedGraph.links.filter(link => {
