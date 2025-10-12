@@ -308,31 +308,6 @@
       return true;
     });
 
-    // --- keep report snapshot in sync (used by ReportButton) ---
-    buildAndSetSnapshot({
-      domain: graph.domain_name,
-      genomes_order: graph.genomes ?? [],
-      filters: {
-        cutoff,
-        showReciprocal,
-        showNonReciprocal,
-        showConsistent,
-        showInconsistent,
-        showPartiallyConsistent
-      },
-      focus_mode: isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0),
-      nodes: nodes.map(n => ({
-        id: n.id.endsWith('__dup') ? n.id.slice(0, -'__dup'.length) : n.id, // normalize duplicate-row ids
-        genome_name: n.genome_name,
-        protein_name: n.protein_name,
-        direction: n.direction,
-        rel_position: n.rel_position,
-        is_present: n.is_present,
-        gene_type: n.gene_type
-      })),
-      links: visibleLinks
-    });
-
 
 
     // Calculate focused nodes and links if in focus mode
@@ -402,6 +377,43 @@
         focusedLinks.add(linkId);
       });
     }
+
+
+        // === SNAPSHOT: capture exactly what's being drawn (after focus is computed) ===
+    const nodesForReport = (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0))
+      ? nodes.filter(n => focusedNodes.has(n.id))
+      : nodes;
+
+    const linksForReport = (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0))
+      // keep only links whose BOTH endpoints are in the focused set
+      ? visibleLinks.filter(l => focusedNodes.has(l.source) && focusedNodes.has(l.target))
+      : visibleLinks;
+
+    buildAndSetSnapshot({
+      domain: graph.domain_name,
+      genomes_order: graph.genomes ?? [],
+      filters: {
+        cutoff,
+        showReciprocal,
+        showNonReciprocal,
+        showConsistent,
+        showInconsistent,
+        showPartiallyConsistent
+      },
+      focus_mode: isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0),
+      nodes: nodesForReport.map(n => ({
+        id: n.id.endsWith('__dup') ? n.id.slice(0, -'__dup'.length) : n.id,
+        genome_name: n.genome_name,
+        protein_name: n.protein_name,
+        direction: n.direction,
+        rel_position: n.rel_position,
+        is_present: n.is_present,
+        gene_type: n.gene_type
+      })),
+      links: linksForReport
+    });
+    // === END SNAPSHOT ===
+
 
     // scales
     const numRows = genomes.length > 2 ? genomes.length + 1 : genomes.length; // Updated so no extra line when there are only 2 genomes
