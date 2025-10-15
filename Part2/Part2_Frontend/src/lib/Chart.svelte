@@ -15,7 +15,7 @@
     links_within_genome: LinksWithinGenome[];
     domain_name?: string;
   };
-  export let cutoff: number = 25;
+  export let cutoff: number = graph.genomes.length === 1 ? 60 : 25;
 
   // Link filter props
   export let showReciprocal = true;
@@ -211,7 +211,7 @@
     const linksWithinGenome: LinksWithinGenome[] = filteredWithinGenomeLinks
       .map(l => ({ ...l }));
 
-    // ADD THIS: Remap within-genome links for single genome case
+    // Remap within-genome links for single genome case
     if (genomes.length === 1) {
       linksWithinGenome.forEach((l, index) => {
         const sourceNode = nodes.find(n => n.id === l.source);
@@ -229,30 +229,20 @@
       });
     }
 
-    // Create UnionFind and coloring logic uniformly
+    // In massage() function - create unified coloring with separate thresholds
+    const unifiedNodeColor = new Map<string, string>();
+
+    // Keep separate UnionFinds for different purposes
     const uf = new UnionFind(nodes.map(n => n.id));
     const withinGenomeUF = new UnionFind(nodes.map(n => n.id));
-    
-    // Apply union logic based on links
-    links.forEach(l => {
-      if ('score' in l && l.score > 25) { // or whatever threshold
-        uf.union(l.source, l.target);
-      }
-    });
 
+    // Reciprocal and link type connections (structural relationships)
     links.forEach((l) => {
       if ('is_reciprocal' in l && l.is_reciprocal) uf.union(l.source, l.target);
       if ('link_type' in l && (l.link_type === 'solid_color' || l.link_type === 'dotted_color')) uf.union(l.source, l.target);
     });
 
-    // ADD THIS: Process within-genome links for UnionFind
-    linksWithinGenome.forEach(l => {
-      if (l.score > 90) { // or whatever threshold you want
-        withinGenomeUF.union(l.source, l.target);
-      }
-    });
-
-    // Add to union-find structure "links" between first-genome and duplicated nodes
+    // Duplication connections
     if (genomes.length > 2 || genomes.length === 1) {
       nodes.forEach((n) => {
         if (n._dup) {
@@ -264,6 +254,9 @@
         }
       });
     }
+
+    // Create unified coloring that considers both UnionFinds
+    const customColors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#00bfff", "#9467bd", "#8c564b", "#e377c2", "#bcbd22", "#17becf"];
 
     // Map CCs to colors
     const componentRoots = new Set(nodes.map((n) => uf.find(n.id)));
@@ -284,43 +277,76 @@
       return size > 1;
     });
 
-    const customColors = [
-      "#1f77b4",
-      "#ff7f0e",
-      "#2ca02c",
-      "#00bfff",
-      "#9467bd",
-      "#8c564b",
-      "#e377c2",
-      "#bcbd22",
-      "#17becf",
-      "#6b8e23",
-      "#4682b4",
-      "#dda0dd",
-      "#40e0d0",
-      "#ff69b4",
-    ];
     const colorScale = d3.scaleOrdinal(customColors).domain(colorRoots);
-    // const colorScale = d3.scaleOrdinal([...d3.schemeSet3]).domain(colorRoots);
-    // Grey-out CCs not associated with colorRoots
-    const nodeColor = new Map(
-      nodes.map((n) => {
-        if (n.is_present === false) return [n.id, '#e6e6e6']
-
-        const root = uf.find(n.id);
-        return [n.id, colorRoots.includes(root) ? colorScale(root) : '#7f7f7f'];
-      })
-    );
-
-    // ADD THIS: Create within-genome coloring
-    const withinGenomeNodeColor = new Map<string, string>();
     nodes.forEach(n => {
-      const root = withinGenomeUF.find(n.id);
-      const componentSize = nodes.filter(node => withinGenomeUF.find(node.id) === root).length;
-      if (componentSize > 1) {
-        withinGenomeNodeColor.set(n.id, '#ff6b6b'); // Red for connected nodes
+      const root = uf.find(n.id);
+      if (colorRoots.includes(root)) {
+        unifiedNodeColor.set(n.id, colorScale(root));
       } else {
-        withinGenomeNodeColor.set(n.id, '#e6e6e6');
+        unifiedNodeColor.set(n.id, '#7f7f7f'); // grey for isolated
+      }
+    });
+
+    // For single genome, use withinGenomeUF for coloring
+    if (genomes.length === 1) {
+      // First, process within-genome links to establish connections
+      linksWithinGenome.forEach(l => {
+        if (l.score > 90) {
+          withinGenomeUF.union(l.source, l.target);
+        }
+      });
+      
+      // Then, only connect original-duplicate pairs that are already connected by within-genome links
+      nodes.forEach((n) => {
+        if (n._dup) {
+          const originalId = n.id.slice(0, -dupSuffix.length);
+          const originalNode = nodes.find((o) => o.id === originalId);
+          if (originalNode) {
+            // Only connect if the original node is already part of a within-genome component
+            const originalRoot = withinGenomeUF.find(originalId);
+            const componentSize = nodes.filter(node => withinGenomeUF.find(node.id) === originalRoot).length;
+            
+            // Only connect if the original is part of a meaningful component (size > 1)
+            if (componentSize > 1) {
+              withinGenomeUF.union(n.id, originalId);
+            }
+          }
+        }
+      });
+
+
+      const withinGenomeComponentRoots = new Set(nodes.map((n) => withinGenomeUF.find(n.id)));
+      const withinGenomeComponentSize = new Map([...withinGenomeComponentRoots].map((root) => [root, 0]));
+      nodes.forEach((n) => {
+        const root = withinGenomeUF.find(n.id);
+        withinGenomeComponentSize.set(root, (withinGenomeComponentSize.get(root) || 0) + 1);
+      });
+
+      const withinGenomeColorRoots = [...withinGenomeComponentRoots].filter(root => {
+        const size = withinGenomeComponentSize.get(root)!;
+        return size > 1;
+      });
+
+      const withinGenomeColorScale = d3.scaleOrdinal(customColors).domain(withinGenomeColorRoots);
+      
+      nodes.forEach(n => {
+        const root = withinGenomeUF.find(n.id);
+        if (withinGenomeColorRoots.includes(root)) {
+          unifiedNodeColor.set(n.id, withinGenomeColorScale(root));
+        } else {
+          unifiedNodeColor.set(n.id, '#7f7f7f');
+        }
+      });
+    }
+
+    // Ensure duplicated nodes have the same color as their originals
+    nodes.forEach(n => {
+      if (n._dup) {
+        const originalId = n.id.slice(0, -dupSuffix.length);
+        const originalColor = unifiedNodeColor.get(originalId);
+        if (originalColor) {
+          unifiedNodeColor.set(n.id, originalColor);
+        }
       }
     });
 
@@ -329,53 +355,12 @@
       links, 
       links_within_genome: linksWithinGenome,  // Return actual data instead of []
       genomes, 
-      nodeColor, 
+      nodeColor: unifiedNodeColor, 
       uf, 
-      withinGenomeNodeColor,  // Return actual coloring instead of new Map()
-      withinGenomeUF: withinGenomeUF
+      withinGenomeNodeColor: unifiedNodeColor,  // Use unified coloring for within-genome
+      withinGenomeUF // Use this for within-genome logic
     };
   }
-
-  function massageSingleGenome(original: typeof graph) {
-  const genomes = original.genomes;
-  const nodes: Node[] = [...original.nodes];
-  
-  // Keep links_within_genome separate - don't convert to Link type
-  const linksWithinGenome: LinksWithinGenome[] = (original.links_within_genome || []).map(l => ({ ...l }));
-  
-  // Create separate UnionFind for within-genome relationships
-  const withinGenomeUF = new UnionFind(nodes.map(n => n.id));
-  linksWithinGenome.forEach(l => {
-    // You can define your own logic for when to union nodes
-    // Maybe based on score threshold, relationship type, etc.
-    if (l.score > 50) { // example threshold
-      withinGenomeUF.union(l.source, l.target);
-    }
-  });
-
-  // Create within-genome coloring
-  const withinGenomeNodeColor = new Map<string, string>();
-  nodes.forEach(n => {
-    const root = withinGenomeUF.find(n.id);
-    const componentSize = nodes.filter(node => withinGenomeUF.find(node.id) === root).length;
-    if (componentSize > 1) {
-      withinGenomeNodeColor.set(n.id, '#ff6b6b'); // Red for connected nodes
-    } else {
-      withinGenomeNodeColor.set(n.id, '#4f46e5'); // Blue for isolated nodes
-    }
-  });
-  
-  return { 
-    nodes, 
-    links: [], // Empty for single genome
-    links_within_genome: linksWithinGenome,
-    genomes, 
-    nodeColor: new Map(), // Empty for single genome
-    withinGenomeNodeColor, // Use this instead
-    uf: new UnionFind([]), // Empty for single genome
-    withinGenomeUF // Use this for within-genome logic
-  };
-}
 
   // ────────────────────────────────────────────────────────────────
   //  Render
@@ -519,17 +504,19 @@
 
     // ── LABELS ──
     const labelSvg = d3.select(labelSvgEl).attr('width', labelWidth).attr('height', height);
-    labelSvg.selectAll('*').remove();
-    labelSvg
-      .append('g')
-      .attr('transform', `translate(${labelWidth - 10},${margin.top})`)
-      .append('text')
-      .attr('y', y(0)! + y.bandwidth() / 2)
-      .attr('dy', '0.35em')
-      .attr('text-anchor', 'end')
-      .style('font-size', '12px')
-      .text(nodes[0]?.genome_name || 'Genome');
-    const yLabels = genomes.length === 1 ? [...genomes, genomes[0]] : (genomes.length > 2 ? [...genomes, genomes[0]] : genomes); // Single genome and >2 genomes get duplicated labels
+
+    // More robust clearing - remove all child elements
+    labelSvg.selectAll("*").remove();
+
+    // Alternative: completely clear and recreate the SVG
+    // labelSvg.html("");
+
+    const yLabels = Array.from({length: numRows}, (_, i) => {
+      if (genomes.length === 1) return genomes[0]; // Single genome case
+      if (genomes.length > 2 && i === genomes.length) return genomes[0]; // Duplicated first genome
+      return genomes[i];
+    });
+
     labelSvg
       .append('g')
       .attr('transform', `translate(${labelWidth - 10},${margin.top})`)

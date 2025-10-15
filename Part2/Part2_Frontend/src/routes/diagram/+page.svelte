@@ -61,7 +61,14 @@
   let errorMessage = "";
   let loading = true;        // Loading state for file upload
   let savingGroup = false;   // Loading state for saving group
-  let cutoff = 25;           // slider value
+  let cutoff = 25; // default value
+
+  // Add this reactive statement
+  $: if (filteredGraph.genomes.length === 1) {
+    cutoff = 60;
+  } else if (filteredGraph.genomes.length > 1) {
+    cutoff = 25;
+  }
 
   // Link filter states
   let showReciprocal = true;
@@ -501,7 +508,7 @@
                   <div class="flex items-center gap-3">
                     <input
                       type="range"
-                      min="25"
+                      min={filteredGraph.genomes.length === 1 ? "60" : "25"}
                       max="100"
                       disabled={selectedGraph.domain_name === "ALL"}
                       bind:value={cutoff}
