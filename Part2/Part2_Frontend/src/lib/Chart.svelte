@@ -1208,7 +1208,7 @@
   {#if graph.nodes.length > 0}
     <button
       type="button"
-      class="absolute top-2 right-2 w-7 h-7 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center text-slate-600 hover:text-slate-800"
+      class="absolute top-2 right-2 w-8 h-8 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center text-slate-600 hover:text-slate-800"
       on:click={() => {
         legendPinned = !legendPinned;
         showLegend = legendPinned;
@@ -1229,7 +1229,7 @@
       aria-label="Toggle legend"
       class:pinned={legendPinned}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
         <line x1="12" y1="16" x2="12" y2="12"/>
         <line x1="12" y1="8" x2="12.01" y2="8"/>
@@ -1254,13 +1254,23 @@
                     </defs>
                     <path d="M -25,-15 L 10,-15 L 25,0 L 10,15 L -25,15 Z" fill="url(#rainbow-node)" />
                   </svg>
-                  <span class="text-xs text-slate-600">Colored: Strongly related nodes</span>
+                  {#if graph.genomes.length === 1}
+                  <span class="text-xs text-slate-600">Colored: Duplications across genome</span>
+                  {/if}
+                  {#if graph.genomes.length > 1}
+                    <span class="text-xs text-slate-600">Colored: Strongly related nodes</span>
+                  {/if}
                 </div>
                 <div class="flex items-center gap-2">
                   <svg width="32" height="16" viewBox="-25 -15 50 30">
                     <path d="M -25,-15 L 10,-15 L 25,0 L 10,15 L -25,15 Z" fill="#7f7f7f" />
                   </svg>
-                  <span class="text-xs text-slate-600">Grey: Unrelated nodes</span>
+                  {#if graph.genomes.length === 1}
+                    <span class="text-xs text-slate-600">Grey: Non-duplications across genome</span>
+                  {/if}
+                  {#if graph.genomes.length > 1}
+                    <span class="text-xs text-slate-600">Grey: Unrelated nodes</span>
+                  {/if}
                 </div>
                 {#if graph.domain_name === "ALL"}
                   <div class="flex items-center gap-2">
@@ -1323,13 +1333,26 @@
                       <line x1="29" y1="10" x2="37" y2="10" stroke="#00ccff" stroke-width="2" />
                       <line x1="37" y1="10" x2="45" y2="10" stroke="#8866ff" stroke-width="2" />
                     </svg>
-                    <span class="text-xs text-slate-600">Colored solid: Reciprocal* connection</span>
+                    {#if graph.genomes.length === 1}
+                      <span class="text-xs text-slate-600">Colored solid: Minimum 90% similarity duplications</span>
+                    {/if}
+                    {#if graph.genomes.length > 1}
+                      <span class="text-xs text-slate-600">Colored solid: Reciprocal* connection</span>
+                    {/if}
                   </div>
                   <div class="flex items-center gap-2">
+                    {#if graph.genomes.length === 1}
                     <svg width="48" height="16" viewBox="0 0 60 20">
-                      <line x1="5" y1="10" x2="45" y2="10" stroke="#bbb" stroke-width="2" stroke-dasharray="4,4" />
+                      <line x1="5" y1="10" x2="45" y2="10" stroke="#bbb" stroke-width="2" />
                     </svg>
-                    <span class="text-xs text-slate-600">Grey dotted: Non-reciprocal</span>
+                      <span class="text-xs text-slate-600">Grey Solid: Duplications less than 90% similarity</span>
+                    {/if}
+                    {#if graph.genomes.length > 1}
+                      <svg width="48" height="16" viewBox="0 0 60 20">
+                        <line x1="5" y1="10" x2="45" y2="10" stroke="#bbb" stroke-width="2" stroke-dasharray="4,4" />
+                      </svg>
+                      <span class="text-xs text-slate-600">Grey dotted: Non-reciprocal</span>
+                    {/if}
                   </div>
                 {/if}
               </div>
@@ -1337,7 +1360,9 @@
 
             <div class="space-y-1">
               <div class="text-xs text-slate-500 border-t border-slate-100 pt-2">
-                <p><strong>*Reciprocal:</strong> Both proteins are each other's best match</p>
+                {#if graph.genomes.length > 1}
+                  <p><strong>*Reciprocal:</strong> Both proteins are each other's best match</p>
+                {/if}
                 <p class="mt-1 text-slate-400">
                   <a href="/help" class="hover:text-slate-600 underline">See help page for detailed explanations</a>
                 </p>
