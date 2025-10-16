@@ -157,7 +157,6 @@ def domain_parse(matrix_files, coord_file, file_names):
         graph_output["genomes"] = genomes
         graph_output["nodes"] = nodes
         graph_output["links"] = links
-        graph_output["links_within_genome"] = links_within_genome
         genomes_output.append(graph_output)
 
     

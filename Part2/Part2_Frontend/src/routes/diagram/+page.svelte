@@ -122,7 +122,7 @@
   function chooseInitialGraph(graphs: Graph[]) {
     if (!Array.isArray(graphs)) {
       console.error("Expected 'graphs' to be an array, but got:", graphs);
-      return { nodes: [], links: [], genomes: [] }; // Return an empty graph as fallback
+      return { nodes: [], links: [], links_within_genome: [], genomes: [] }; // Return an empty graph as fallback
     }
     return graphs.find(g => g.domain_name === 'ALL') || graphs[0];
   }
@@ -197,7 +197,7 @@
 
       // Reset selected genomes and filtered graph
       selectedGenomes = [];
-      filteredGraph = { nodes: [], links: [], genomes: [] };
+      filteredGraph = { nodes: [], links: [], links_within_genome: [], genomes: [] };
       loading = false;
     } catch (error) {
       if (error instanceof TypeError && error.message === 'Failed to fetch') {
@@ -288,8 +288,15 @@
 
   // Filter graph according to selected genomes
   function filterGraph() {
-    if (selectedGenomes.length !== 3 && selectedGenomes.length !== 2 && selectedGenomes.length !== 1) {
-      console.error('Please select 1, 2, or 3 genomes to filter the graph.');
+    const isDomainCase = graphs.length > 1;
+    const valid = isDomainCase
+      ? (selectedGenomes.length === 2 || selectedGenomes.length === 3)
+      : (selectedGenomes.length === 1 || selectedGenomes.length === 2 || selectedGenomes.length === 3);
+
+    if (!valid) {
+      console.error(isDomainCase
+        ? 'For domain-specific views, please select 2 or 3 genomes.'
+        : 'Please select 1, 2, or 3 genomes to filter the graph.');
       return;
     }
 
@@ -298,14 +305,14 @@
     filteredGraph.domain_name = selectedGraph.domain_name;  // Copy domain_name
 
     // Update nodes in filtered graph
-    filteredGraph.nodes = selectedGraph.nodes.filter(node =>
+    filteredGraph.nodes = (selectedGraph.nodes ?? []).filter(node =>
       selectedGenomes.includes(node.genome_name)
     );
 
     // Update links_within_genome in filtered graph
-    filteredGraph.links_within_genome = selectedGraph.links_within_genome.filter(link => {
-      const sourceNode = selectedGraph.nodes.find(n => n.id === link.source);
-      const targetNode = selectedGraph.nodes.find(n => n.id === link.target);
+    filteredGraph.links_within_genome = (selectedGraph.links_within_genome ?? []).filter(link => {
+      const sourceNode = (selectedGraph.nodes ?? []).find(n => n.id === link.source);
+      const targetNode = (selectedGraph.nodes ?? []).find(n => n.id === link.target);
 
       if (!sourceNode || !targetNode) return false;
 
@@ -315,9 +322,9 @@
     });
 
     // Update links in filtered graph
-    filteredGraph.links = selectedGraph.links.filter(link => {
-      const sourceNode = selectedGraph.nodes.find(n => n.id === link.source);
-      const targetNode = selectedGraph.nodes.find(n => n.id === link.target);
+    filteredGraph.links = (selectedGraph.links ?? []).filter(link => {
+      const sourceNode = (selectedGraph.nodes ?? []).find(n => n.id === link.source);
+      const targetNode = (selectedGraph.nodes ?? []).find(n => n.id === link.target);
 
       if (!sourceNode || !targetNode) return false;
 
@@ -329,6 +336,7 @@
 
   // Select domain/graph to focus on
   function selectDomain(idx: number) {
+    if (!graphs[idx]) return;
     selectedGraph = graphs[idx];
     filterGraph();  // Reapply the filter to the selected graph
     console.log(selectedGraph)
@@ -476,7 +484,9 @@
 
                       <button
                         on:click={filterGraph}
-                        disabled={selectedGenomes.length !== 2 && selectedGenomes.length !== 3 && selectedGenomes.length !== 1}
+                        disabled={graphs.length > 1
+                          ? !(selectedGenomes.length === 2 || selectedGenomes.length === 3)
+                          : !(selectedGenomes.length === 1 || selectedGenomes.length === 2 || selectedGenomes.length === 3)}
                         class="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors duration-200 cursor-pointer disabled:bg-green-300 disabled:cursor-not-allowed"
                       >
                         Confirm Selection
