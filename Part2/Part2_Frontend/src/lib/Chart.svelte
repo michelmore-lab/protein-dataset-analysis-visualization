@@ -379,7 +379,7 @@
     }
 
 
-        // === SNAPSHOT: capture exactly what's being drawn (after focus is computed) ===
+    // === SNAPSHOT: capture exactly what's being drawn (after focus is computed) ===
     const nodesForReport = (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0))
       ? nodes.filter(n => focusedNodes.has(n.id))
       : nodes;
