@@ -2,6 +2,9 @@
   import { onMount, afterUpdate } from 'svelte';
   import * as d3 from 'd3';
   import UnionFind from '$lib/UnionFind';
+  import { selectionState } from '$lib/report/selectionStore';
+  import { buildAndSetSnapshot } from '$lib/report/reportSnapshot';
+
 
   /**
    * Props
@@ -305,6 +308,8 @@
       return true;
     });
 
+
+
     // Calculate focused nodes and links if in focus mode
     if (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0)) {
       focusedNodes.clear();
@@ -373,6 +378,43 @@
       });
     }
 
+
+    // === SNAPSHOT: capture exactly what's being drawn (after focus is computed) ===
+    const nodesForReport = (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0))
+      ? nodes.filter(n => focusedNodes.has(n.id))
+      : nodes;
+
+    const linksForReport = (isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0))
+      // keep only links whose BOTH endpoints are in the focused set
+      ? visibleLinks.filter(l => focusedNodes.has(l.source) && focusedNodes.has(l.target))
+      : visibleLinks;
+
+    buildAndSetSnapshot({
+      domain: graph.domain_name,
+      genomes_order: graph.genomes ?? [],
+      filters: {
+        cutoff,
+        showReciprocal,
+        showNonReciprocal,
+        showConsistent,
+        showInconsistent,
+        showPartiallyConsistent
+      },
+      focus_mode: isFocused && (selectedNodes.size > 0 || selectedLinks.size > 0),
+      nodes: nodesForReport.map(n => ({
+        id: n.id.endsWith('__dup') ? n.id.slice(0, -'__dup'.length) : n.id,
+        genome_name: n.genome_name,
+        protein_name: n.protein_name,
+        direction: n.direction,
+        rel_position: n.rel_position,
+        is_present: n.is_present,
+        gene_type: n.gene_type
+      })),
+      links: linksForReport
+    });
+    // === END SNAPSHOT ===
+
+
     // scales
     const numRows = genomes.length > 2 ? genomes.length + 1 : genomes.length; // Updated so no extra line when there are only 2 genomes
     const y = d3.scaleBand<number>().domain(d3.range(numRows)).range([0, height]);
@@ -383,6 +425,7 @@
 
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
     const rowOf = (n: Node) => (n._dup ? genomes.length : genomes.indexOf(n.genome_name));
+
 
     // ── LABELS ──
     const labelSvg = d3.select(labelSvgEl).attr('width', labelWidth).attr('height', height);
@@ -534,6 +577,12 @@
         } else {
           selectedLinks.add(linkId);
         }
+
+        selectionState.set({
+          isFocused,
+          nodes: Array.from(selectedNodes),
+          links: Array.from(selectedLinks)
+        });
         draw();
       })
       .on('mouseover', function (event, d) {
@@ -653,6 +702,11 @@
           }
         });
         selectedNodesCount = selectedNodes.size;
+        selectionState.set({
+          isFocused,
+          nodes: Array.from(selectedNodes),
+          links: Array.from(selectedLinks)
+        });
         draw();
       })
       .on('mouseover', function (event, d) {
@@ -821,12 +875,22 @@
       selectedNodesCount = 0;
       isFocused = false;
     }
+    selectionState.set({
+      isFocused,
+      nodes: Array.from(selectedNodes),
+      links: Array.from(selectedLinks)
+    });
     draw();
   }
 
   function applyFocus() {
     if (selectedNodes.size === 0) return;
     isFocused = true;
+    selectionState.set({
+      isFocused,
+      nodes: Array.from(selectedNodes),
+      links: Array.from(selectedLinks)
+    });
     draw();
   }
 
@@ -834,6 +898,11 @@
     isFocused = false;
     selectedNodes.clear();
     selectedNodesCount = 0;
+    selectionState.set({
+      isFocused,
+      nodes: Array.from(selectedNodes),
+      links: Array.from(selectedLinks)
+    });
     draw();
   }
 
