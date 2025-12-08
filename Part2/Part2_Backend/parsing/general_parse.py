@@ -69,9 +69,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        # Open matrix file and coordinate file
+        # Open matrix file and coordinate file as BytesIO objects
         with open(args.matrix_file, 'rb') as matrix_file, open(args.coord_file, 'rb') as coord_file:
-            result_obj = parse_matrix(matrix_file, coord_file)
+            matrix_bytes = matrix_file.read()
+            coord_bytes = coord_file.read()
+            
+            # Create BytesIO objects with filename attributes
+            matrix_io = BytesIO(matrix_bytes)
+            matrix_io.name = args.matrix_file
+            coord_io = BytesIO(coord_bytes)
+            coord_io.name = args.coord_file
+            
+            result_obj = parse_matrix(matrix_io, coord_io)
             output_json = json.dumps(result_obj, indent=2)
 
             if args.output:
