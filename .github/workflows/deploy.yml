@@ -80,7 +80,7 @@ jobs:
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install --upgrade zappa
+          pip install "zappa==0.60.2"
           if zappa status -s zappa_settings.json dev >/dev/null 2>&1; then
             zappa update -s zappa_settings.json dev
           else
