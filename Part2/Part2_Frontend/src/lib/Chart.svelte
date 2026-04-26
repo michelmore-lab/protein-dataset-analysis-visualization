@@ -61,6 +61,14 @@
     )
   );
 
+  /** Deterministic string hash (djb2). Returns a non-negative integer. */
+  function hashString(str: string): number {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash);
+  }
 
   interface Node {
     id: string;
@@ -280,14 +288,20 @@
       return size > 1;
     });
 
-    const colorScale = d3.scaleOrdinal(customColors).domain(colorRoots);
+    // Deterministic color: hash the alphabetically-first non-dup member of each component
+    const rootColorMap = new Map<string, string>();
+    colorRoots.forEach(root => {
+      const members = nodes
+        .filter(n => uf.find(n.id) === root && !n._dup)
+        .map(n => n.id)
+        .sort();
+      const label = members.length > 0 ? members[0] : root;
+      rootColorMap.set(root, customColors[hashString(label) % customColors.length]);
+    });
+
     nodes.forEach(n => {
       const root = uf.find(n.id);
-      if (colorRoots.includes(root)) {
-        unifiedNodeColor.set(n.id, colorScale(root));
-      } else {
-        unifiedNodeColor.set(n.id, '#7f7f7f'); // grey for isolated
-      }
+      unifiedNodeColor.set(n.id, rootColorMap.get(root) ?? '#7f7f7f');
     });
 
     // For single genome, use withinGenomeUF for coloring
@@ -330,15 +344,19 @@
         return size > 1;
       });
 
-      const withinGenomeColorScale = d3.scaleOrdinal(customColors).domain(withinGenomeColorRoots);
-      
+      const withinGenomeRootColorMap = new Map<string, string>();
+      withinGenomeColorRoots.forEach(root => {
+        const members = nodes
+          .filter(n => withinGenomeUF.find(n.id) === root && !n._dup)
+          .map(n => n.id)
+          .sort();
+        const label = members.length > 0 ? members[0] : root;
+        withinGenomeRootColorMap.set(root, customColors[hashString(label) % customColors.length]);
+      });
+
       nodes.forEach(n => {
         const root = withinGenomeUF.find(n.id);
-        if (withinGenomeColorRoots.includes(root)) {
-          unifiedNodeColor.set(n.id, withinGenomeColorScale(root));
-        } else {
-          unifiedNodeColor.set(n.id, '#7f7f7f');
-        }
+        unifiedNodeColor.set(n.id, withinGenomeRootColorMap.get(root) ?? '#7f7f7f');
       });
     }
 
